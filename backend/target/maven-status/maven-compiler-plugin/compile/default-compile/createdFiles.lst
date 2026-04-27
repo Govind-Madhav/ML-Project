@@ -1,0 +1,9 @@
+com\cloudopt\model\PredictionRequest.class
+com\cloudopt\CloudOptBackendApplication.class
+com\cloudopt\service\MetricsService.class
+com\cloudopt\model\MetricsResponse.class
+com\cloudopt\WebConfig$1.class
+com\cloudopt\WebConfig.class
+com\cloudopt\controller\MetricsController.class
+com\cloudopt\model\DecisionResponse.class
+com\cloudopt\model\MlPredictResponse.class
