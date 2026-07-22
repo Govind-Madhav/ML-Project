@@ -8,12 +8,14 @@ GET  /model/info     → feature list + model metadata
 """
 
 import numpy as np
+import pandas as pd
 import joblib
 import os
 from contextlib import asynccontextmanager
 from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -65,6 +67,14 @@ app = FastAPI(
     description="Predicts whether a task/machine will fail based on CPU usage distribution and resource metrics.",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -136,7 +146,7 @@ class BatchResponse(BaseModel):
 def features_to_array(task: TaskFeatures) -> np.ndarray:
     """Convert a TaskFeatures object to a feature array in the correct order."""
     row = [getattr(task, f, 0.0) or 0.0 for f in FEATURES]
-    return np.array(row, dtype=np.float64).reshape(1, -1)
+    return pd.DataFrame([row], columns=FEATURES, dtype=np.float64)
 
 
 def make_response(prob: float) -> PredictResponse:
@@ -172,27 +182,38 @@ def model_info():
     }
 
 
-@app.post("/predict", response_model=PredictResponse)
+@app.post(
+    "/predict",
+    response_model=PredictResponse,
+    responses={500: {"description": "Model inference failed"}},
+)
 def predict(task: TaskFeatures):
     """Predict failure probability for a single task/machine observation."""
     try:
-        X = features_to_array(task)
-        X_scaled = scaler.transform(X)
-        prob = model.predict_proba(X_scaled)[0][1]
+        x = features_to_array(task)
+        x_scaled = pd.DataFrame(scaler.transform(x.to_numpy()), columns=FEATURES)
+        prob = model.predict_proba(x_scaled)[0][1]
         return make_response(prob)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/predict/batch", response_model=BatchResponse)
+@app.post(
+    "/predict/batch",
+    response_model=BatchResponse,
+    responses={
+        400: {"description": "No records provided"},
+        500: {"description": "Model inference failed"},
+    },
+)
 def predict_batch(batch: BatchRequest):
     """Predict failure probability for multiple records in one call."""
     if not batch.records:
         raise HTTPException(status_code=400, detail="No records provided.")
     try:
-        X = np.vstack([features_to_array(r) for r in batch.records])
-        X_scaled = scaler.transform(X)
-        probs = model.predict_proba(X_scaled)[:, 1]
+        x = pd.concat([features_to_array(r) for r in batch.records], ignore_index=True)
+        x_scaled = pd.DataFrame(scaler.transform(x.to_numpy()), columns=FEATURES)
+        probs = model.predict_proba(x_scaled)[:, 1]
         return BatchResponse(predictions=[make_response(p) for p in probs])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

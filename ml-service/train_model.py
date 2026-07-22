@@ -203,9 +203,53 @@ for name, model in results.items():
         best_auc, best_name, best_model = auc, name, model
 
 # ── 8. Save best model ────────────────────────────────────────────────────────
+
 print(f"\nBest model: {best_name} (ROC-AUC={best_auc:.4f})")
 joblib.dump(best_model, MODEL_PATH)
 print(f"Saved → {MODEL_PATH}  |  Scaler → {SCALER_PATH}")
 print("\nFeatures used:")
 for f in features:
     print(f"  {f}")
+
+# ── 9. Visual Performance Summary ──────────────────────────────────────────
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.metrics import RocCurveDisplay
+
+    y_pred  = best_model.predict(X_test)
+    y_proba = best_model.predict_proba(X_test)[:, 1]
+    auc = roc_auc_score(y_test, y_proba)
+    ap  = average_precision_score(y_test, y_proba)
+    cm  = confusion_matrix(y_test, y_pred)
+    cr  = classification_report(y_test, y_pred, target_names=['not_failed', 'failed'], output_dict=True)
+
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+    fig.suptitle(f"Model Performance — {best_name}", fontsize=16, fontweight='bold')
+
+    # ROC Curve
+    RocCurveDisplay.from_estimator(best_model, X_test, y_test, ax=axs[0], name=f"ROC-AUC = {auc:.4f}")
+    axs[0].plot([0, 1], [0, 1], 'k--', lw=1)
+    axs[0].set_title("ROC Curve")
+    axs[0].legend(loc='lower right')
+
+    # Confusion Matrix
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=axs[1], cbar=False,
+                xticklabels=['Not Failed', 'Failed'], yticklabels=['Not Failed', 'Failed'])
+    axs[1].set_xlabel('Predicted')
+    axs[1].set_ylabel('Actual')
+    axs[1].set_title('Confusion Matrix')
+
+    # Metrics box
+    metrics_text = (
+        f"Accuracy: {cr['accuracy']:.4f}\n"
+        f"F1 (fail): {cr['failed']['f1-score']:.4f}\n"
+        f"ROC-AUC: {auc:.4f}\n"
+        f"Avg Precision: {ap:.4f}"
+    )
+    plt.gcf().text(0.75, 0.25, metrics_text, fontsize=12, bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+except Exception as e:
+    print(f"[WARN] Could not display performance plot: {e}")

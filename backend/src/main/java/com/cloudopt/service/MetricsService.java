@@ -24,7 +24,7 @@ import java.util.*;
 @Service
 public class MetricsService {
 
-    private static final String ML_SERVICE_URL    = "http://localhost:8000/predict";
+    private static final String ML_SERVICE_URL    = "http://127.0.0.1:8000/predict";
     private static final double SCALE_UP_THRESHOLD   = 0.70;
     private static final double SCALE_DOWN_THRESHOLD = 0.30;
     private static final long   COOLDOWN_MILLIS      = 30_000; // 30s cooldown for demo
@@ -214,15 +214,27 @@ public class MetricsService {
     }
 
     private MlPredictResponse callMLService(PredictionRequest reqBody) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<PredictionRequest> entity = new HttpEntity<>(reqBody, headers);
-            ResponseEntity<MlPredictResponse> resp =
-                    restTemplate.postForEntity(ML_SERVICE_URL, entity, MlPredictResponse.class);
-            if (resp.getStatusCode().is2xxSuccessful()) return resp.getBody();
-        } catch (Exception e) {
-            System.err.println("[WARN] ML service unavailable — using heuristic fallback: " + e.getMessage());
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<PredictionRequest> entity = new HttpEntity<>(reqBody, headers);
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                ResponseEntity<MlPredictResponse> resp =
+                        restTemplate.postForEntity(ML_SERVICE_URL, entity, MlPredictResponse.class);
+                if (resp.getStatusCode().is2xxSuccessful()) return resp.getBody();
+            } catch (Exception e) {
+                if (attempt < 3) {
+                    try {
+                        Thread.sleep(250L * attempt);
+                        continue;
+                    } catch (InterruptedException interruptedException) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                System.err.println("[WARN] ML service unavailable — using heuristic fallback: " + e.getMessage());
+            }
         }
         // Heuristic fallback when ML service is down
         MlPredictResponse fb = new MlPredictResponse();
