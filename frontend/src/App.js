@@ -354,7 +354,7 @@ export default function App() {
           </div>
 
           {/* History table */}
-          <div className="card" style={{ overflow: 'auto' }}>
+          <div className="card scrollable">
             <div className="card-title">📋 Prediction History (Last {history.length})</div>
             {history.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '40px 0', textAlign: 'center' }}>
